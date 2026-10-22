@@ -5,13 +5,15 @@
   "private": true,
   "scripts": {
     "typecheck": "bun check",
-    "dev": "bun run index.ts"
+    "dev": "bun run index.ts",
+    "format": "bunx prettier --write ."
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/express": "^5.0.6",
     "concurrently": "^10.0.6",
     "my-app": ".",
+    "prettier": "^3.9.10",
     "vite": "^8.3.4"
   },
   "peerDependencies": {
