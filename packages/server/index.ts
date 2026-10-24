@@ -55,21 +55,27 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     // Append the current user message to history
     sessionsHistory.set(sessionID, history);
 
-    const response = await client.chat.completions.create({
-      model: 'openai/gpt-oss-20b',
-      messages: history,
-      temperature: 0.2,
-      max_tokens: 100,
-    });
+    // adding try-catch block to handle errors from the Groq API
+    try {
+      const response = await client.chat.completions.create({
+        model: 'openai/gpt-oss-20b',
+        messages: history,
+        temperature: 0.2,
+        max_tokens: 100,
+      });
 
-    const reply =
-      response.choices[0]?.message.content ?? 'No response from model.';
-    history.push({ role: 'assistant', content: reply });
+      const reply =
+        response.choices[0]?.message.content ?? 'No response from model.';
+      history.push({ role: 'assistant', content: reply });
 
-    // Append the assistant's response to history
-    sessionsHistory.set(sessionID, history);
+      // Append the assistant's response to history
+      sessionsHistory.set(sessionID, history);
 
-    res.json({ message: reply });
+      res.json({ message: reply });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Failed to generate a response.' });
+    }
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Something went wrong' });
