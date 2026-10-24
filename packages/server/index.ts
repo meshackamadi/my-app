@@ -1,12 +1,23 @@
-import express from 'express';
+import express, { response } from 'express';
 import type { Request, Response } from 'express';
 import dotenv from 'dotenv';
-import openAI from 'openai';
+import Groq from 'groq-sdk';
+import z from 'zod';
 
 dotenv.config();
 
-const client = new openAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const client = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
+
+// Define the schema for the request body
+const chatSchema = z.object({
+  prompt: z
+    .string()
+    .trim() //eliminate whitespace from both ends of the string
+    .max(1000, 'Prompt must be at most 1000 characters long') // controls the maximum length of the prompt
+    .min(1, 'Prompt must be at least 1 character long'),
+  sessionHistory: z.string().uuid('Conversation history must be a valid UUID'),
 });
 
 const app = express();
@@ -20,17 +31,49 @@ app.get('/api/hello', (req: Request, res: Response) => {
   res.json({ message: 'Hello there! my name is Mesh' });
 });
 
+// One history per session (UUID)
+const sessionsHistory = new Map<
+  string,
+  Array<{ role: 'user' | 'assistant'; content: string }>
+>();
+
 app.post('/api/chat', async (req: Request, res: Response) => {
-  const { prompt } = req.body;
+  const validatedData = chatSchema.safeParse(req.body);
+  if (!validatedData.success) {
+    return res
+      .status(400)
+      .json({ error: validatedData.error.issues.map((i) => i.message) });
+  }
 
-  const response = await client.responses.create({
-    model: 'gpt-4o-mini',
-    input: prompt,
-    temperature: 0.2,
-    max_output_tokens: 100,
-  });
+  const { prompt, sessionHistory: sessionID } = validatedData.data;
 
-  res.json({ message: response.output_text });
+  // Get or create the session history for the given session ID
+  const history = sessionsHistory.get(sessionID) || [];
+  history.push({ role: 'user', content: prompt });
+
+  try {
+    // Append the current user message to history
+    sessionsHistory.set(sessionID, history);
+
+    const response = await client.chat.completions.create({
+      model: 'openai/gpt-oss-20b',
+      messages: history,
+      temperature: 0.2,
+      max_tokens: 100,
+    });
+
+    const reply =
+      response.choices[0]?.message.content ?? 'No response from model.';
+    history.push({ role: 'assistant', content: reply });
+
+    // Append the assistant's response to history
+    sessionsHistory.set(sessionID, history);
+
+    res.json({ message: reply });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
 });
 
 app.listen(port, () => {
